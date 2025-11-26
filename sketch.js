@@ -9,6 +9,7 @@ let playStartTime; // when the current line started playing
 let playDuration; // duration of the current line being played
 let playPoints; // points of the current line being played
 let palette = ['#ff0000', '#ff9300', '#fffb00', '#0433ff']; // drawing color palette
+let palette2 = ['#ff0000','#ff9300','#fffb00','#60fd60ff','#00a800','#00faff','#00a0ff','#0433ff','#7a00ff','#ff00ea'];
 let colorIndex = 0; // index for cycling through colors
 let thicknessPalette = [1, 7, 13, 20]; // thickness options
 let thicknessIndex = 0; // index for cycling through thicknesses
