@@ -12,6 +12,10 @@ let palette = ['#ff0000', '#ff9300', '#fffb00', '#0433ff']; // drawing color pal
 let colorIndex = 0; // index for cycling through colors
 let thicknessPalette = [1, 7, 13, 20]; // thickness options
 let thicknessIndex = 0; // index for cycling through thicknesses
+let currentmin; // overall timer to keep track of intervals, periodically save/playback/clear
+
+
+// using this as ref for per minute update: https://editor.p5js.org/brain/sketches/BIzrc_ZDV
 
 // PoseNet global variables
 let video;
@@ -47,22 +51,39 @@ function setup() {
 
   poseNet.on("pose", gotPoses); // pose callback
 
+  currentmin = minute(); // using built in minute() call
   // UI
   // speed slider
-  createP('Speed').position(55, height + 8).style('font-family', 'sans-serif');
-  speedSlider = createSlider(0.25, 3, 1, 0.01).position(10, height + 3);
 
-  // play and clear buttons
-  createButton('Play').position(175, height + 8).mousePressed(() => playAll());
-  createButton('Clear').position(220, height + 8).mousePressed(() => { lines = []; });
+  // commenting out this part as well for now. 
+  // question: should we keep constant speed or randomize/change over time ?
+
+  //createP('Speed').position(55, height + 8).style('font-family', 'sans-serif');
+  //speedSlider = createSlider(0.25, 3, 1, 0.01).position(10, height + 3);
+
+  // play and clear buttons - Fiona edit, removing these from view 
+  //createButton('Play').position(175, height + 8).mousePressed(() => playAll());
+  //createButton('Clear').position(220, height + 8).mousePressed(() => { lines = []; });
 }
 
 // DRAW ----------------------------------------------------------------------------------
 
 function draw() {
-  background(255, 255, 255); 
+  let m = minute();
+
+
+  if (m !=currentmin && !playing){
+    // 1. save image
+    saveCanvas('myScreenshot'+minute(), 'png')
+
+    // 2. play back sound! 
+    playAll();
+    currentmin = m
+  }
+
 
   // draw stored lines
+  background(255); 
   strokeCap(ROUND); // rounded line endings
   for (let l of lines) drawLine(l); // draw all stored lines
   if (current) drawLine(current); // draw current line
@@ -150,18 +171,29 @@ function gotPoses(results) {
 
 // playback --------------------------------------------------------------------------------------------------
 function playAll() { // play all lines in lines array
+  
   if (playing || lines.length === 0) return; // ignore if already playing or no lines to play
+  
+  if (current && current.points.length > 1) {
+  lines.push(current);
+  current = null;
+}
+
   playing = true; // sets playing to true so other parts of code know playback is happening
   playIndex = 0; // reset play index so playback starts from beginning
   playNext(); // start playback
+
+
 }
 
 function playNext() {
   // end condition - if all lines played
   if (playIndex >= lines.length) {
-    playing = false;
-    return;
-  }
+  playing = false;
+  lines = [];   // safe clear
+  return;
+}
+  
 
   let line = lines[playIndex++]; // get next line and increment index
   let waveform = waveMap[line.color] || 'sine'; // get waveform type from color or default to sine
@@ -176,7 +208,8 @@ function playNext() {
     lengthPx += dist(line.points[i-1].x, line.points[i-1].y,  // calculate distance between two x and y pairs that are sequential points in the line
                      line.points[i].x, line.points[i].y);
   }
-  playDuration = lengthPx * baseMsPerPixel / speedSlider.value(); // duration adjusted by speed slider. The pixel length is multiplied by the base ms per pixel (2ms) and divided by the speed slider value.
+  playDuration = lengthPx * baseMsPerPixel ; // duration adjusted by speed slider. -> removed 
+  // The pixel length is multiplied by the base ms per pixel (2ms) and divided by the speed slider value.
   playPoints = line.points; // store points for playhead drawing
   playStartTime = millis(); // store start time for playhead drawing
 
