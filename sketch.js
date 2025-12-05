@@ -14,6 +14,7 @@ let colorIndex = 0; // index for cycling through colors
 let thicknessPalette = [1, 7, 13, 20]; // thickness options
 let thicknessIndex = 0; // index for cycling through thicknesses
 let currentmin; // overall timer to keep track of intervals, periodically save/playback/clear
+let reverb;
 
 
 // using this as ref for per minute update: https://editor.p5js.org/brain/sketches/BIzrc_ZDV
@@ -40,6 +41,11 @@ const baseMsPerPixel = 2; // base milliseconds per pixel for playback speed
 
 function setup() {
   createCanvas(windowWidth, windowHeight); // create full-window canvas
+
+  reverb = new p5.Reverb();
+  // optional defaults — tweak if you want
+  reverb.drywet(0.7); // 0 = no reverb, 1 = full reverb
+
   
   // PoseNet setup
   video = createCapture(VIDEO);
@@ -200,7 +206,10 @@ function playNext() {
   let waveform = waveMap[line.color] || 'sine'; // get waveform type from color or default to sine
   osc = new p5.Oscillator(waveform); // create oscillator
   osc.start(); // start oscillator
-  let amp = map(line.thickness, 1, 20, 0.1, 1); // map thickness to amplitude
+
+  reverb.process(osc, 3, 2);  
+
+  let amp = map(line.thickness, 1, 20, 0.1, 0.1); // map thickness to amplitude
   osc.amp(amp, 0.05); // ramp up amplitude to prevent clicks or pops by fading to the new amplitude over 0.05s(50ms)
 
   // compute duration from line length
@@ -218,8 +227,8 @@ function playNext() {
   let segMs = playDuration / (playPoints.length - 1); // time per segment. The play duration is divided by the number of segments (points - 1). If playDuration = 2000 ms and playPoints.length = 11, then segMs = 2000 / 10 = 200 ms per segment.
   for (let i = 0; i < playPoints.length - 1; i++) { // iterate through points
     let p1 = playPoints[i], p2 = playPoints[i+1]; // get current and next point. Each is an object with x and y properties.
-    let f1 = map(p1.y, height, 0, 40, 2000); // converts the y-value of each point into a frequnecy (inverted so top is high freq)
-    let f2 = map(p2.y, height, 0, 40, 2000); // converts the y-value of each point into a frequency (inverted so top is high freq)
+    let f1 = map(p1.y, height, 0, 10, 600); // converts the y-value of each point into a frequnecy (inverted so top is high freq)
+    let f2 = map(p2.y, height, 0, 10, 600); // converts the y-value of each point into a frequency (inverted so top is high freq)
     setTimeout(() => osc.freq(f2, segMs/1000), i * segMs); // change the oscillator's pitch to f2, gradually over the course of segMs milliseconds, starting at i * segMs milliseconds after the line starts playing.
   }
 
@@ -282,4 +291,3 @@ function keyPressed() {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
-
