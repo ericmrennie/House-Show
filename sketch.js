@@ -9,9 +9,22 @@ let playStartTime; // when the current line started playing
 let playDuration; // duration of the current line being played
 let playPoints; // points of the current line being played
 let palette = ['#ff0000', '#ff9300', '#fffb00', '#0433ff']; // drawing color palette
+let palette2 = ['#ff0000','#ff9300','#fffb00','#60fd60ff','#00a800','#00faff','#00a0ff','#0433ff','#7a00ff','#ff00ea'];
 let colorIndex = 0; // index for cycling through colors
 let thicknessPalette = [1, 7, 13, 20]; // thickness options
 let thicknessIndex = 0; // index for cycling through thicknesses
+//let currentmin; // overall timer to keep track of intervals, periodically save/playback/clear
+
+// min time is set to millis (built in), showtimer toggle
+let mintime; //start time in millis
+let length = 60000; // 1 min cycle length in ms
+let showtimer=false;
+
+let currentmin; // overall timer to keep track of intervals, periodically save/playback/clear
+let reverb;
+
+
+// using this as ref for per minute update: https://editor.p5js.org/brain/sketches/BIzrc_ZDV
 
 // PoseNet global variables
 let video;
@@ -35,6 +48,11 @@ const baseMsPerPixel = 2; // base milliseconds per pixel for playback speed
 
 function setup() {
   createCanvas(windowWidth, windowHeight); // create full-window canvas
+
+  reverb = new p5.Reverb();
+  // optional defaults — tweak if you want
+  reverb.drywet(0.7); // 0 = no reverb, 1 = full reverb
+
   
   // PoseNet setup
   video = createCapture(VIDEO);
@@ -47,30 +65,51 @@ function setup() {
 
   poseNet.on("pose", gotPoses); // pose callback
 
+  //currentmin = minute(); // using built in minute() call
+  mintime = millis(); 
+  showtimer = true; 
+
   // UI
   // speed slider
-  createP('Speed').position(55, height + 8).style('font-family', 'sans-serif');
-  speedSlider = createSlider(0.25, 3, 1, 0.01).position(10, height + 3);
 
-  // play and clear buttons
-  createButton('Play').position(175, height + 8).mousePressed(() => playAll());
-  createButton('Clear').position(220, height + 8).mousePressed(() => { lines = []; });
+  // commenting out this part as well for now. 
+  // question: should we keep constant speed or randomize/change over time ?
+
+  //createP('Speed').position(55, height + 8).style('font-family', 'sans-serif');
+  //speedSlider = createSlider(0.25, 3, 1, 0.01).position(10, height + 3);
+
+  // play and clear buttons - Fiona edit, removing these from view 
+  //createButton('Play').position(175, height + 8).mousePressed(() => playAll());
+  //createButton('Clear').position(220, height + 8).mousePressed(() => { lines = []; });
 }
 
 // DRAW ----------------------------------------------------------------------------------
 
-function draw() {
-  background(255, 255, 255); 
+function draw() { 
+
+  let elapsedSec=millis()-mintime;
+
+  if (elapsedSec>=length && !playing){
+    // 1. save image
+    saveCanvas('myScreenshot'+minute(), 'png')
+
+    // 2. play back sound! 
+    showtimer = false;
+    playAll();
+    mintime=millis(); // reset timer
+  }
+
 
   // draw stored lines
+  background(255); 
   strokeCap(ROUND); // rounded line endings
+
   for (let l of lines) drawLine(l); // draw all stored lines
   if (current) drawLine(current); // draw current line
-
-  // draw playhead
-  if (playing) drawPlayhead();
+  if (playing) drawPlayhead(); // draw playhead if playing 
 
   if (!playing && noseX !== null && noseY !== null) {
+   
     let mirroredX = width - noseX;  // mirror x coordinate in video feed
     let mirroredY = noseY; // y coordinate remains the same
 
@@ -82,16 +121,16 @@ function draw() {
 
       // if the nose 'teleports', start a new line instead of connecting
       if (jumpDist > 50) {
-        if (current && current.points.length > 1) {
-          lines.push(current);
-        }
-        current = null; 
+        if (current && current.points.length > 1) lines.push(current);
+        current = null;  
       }
     }
 
+
+   
+
     // if we are not currently drawing a line, create one
     if (!current) {
-
       // pick next color in palette
       let nextColor = palette[colorIndex];
       colorIndex = (colorIndex + 1) % palette.length;
@@ -106,21 +145,38 @@ function draw() {
       };
     }
 
-    // add mirrored nose position instead of original
+
+       // add mirrored nose position instead of original
     current.points.push({ x: mirroredX, y: mirroredY });
 
     // update prev nose every frame (ALSO mirrored)
     prevNose = { x: mirroredX, y: mirroredY };
 
+   }
 
     // if PoseNet loses the nose, finalize line
     if (poses.length === 0) {
-      if (current.points.length > 1) lines.push(current);
+      if (current && current.points.length > 1) lines.push(current);
       current = null;
       prevNose = null;
     }
+
+
+    // timer 
+if (showtimer && !playing) {
+    let elapsedSec = millis()-mintime;
+    let remaining= ceil((length - elapsedSec)/1000);
+
+    remaining = max(0, remaining); // prevent negative display
+
+    fill(0);
+    noStroke();
+    textSize(40);
+    textAlign(CENTER, TOP);
+    text(remaining, width/2, 10);
   }
-}
+  }
+
 
 // DRAW LINE FUNCTION ----------------------------------------------------------------------------------
 function drawLine(l) {
@@ -150,24 +206,40 @@ function gotPoses(results) {
 
 // playback --------------------------------------------------------------------------------------------------
 function playAll() { // play all lines in lines array
+  
   if (playing || lines.length === 0) return; // ignore if already playing or no lines to play
+  
+  if (current && current.points.length > 1) {
+  lines.push(current);
+  current = null;
+}
+
   playing = true; // sets playing to true so other parts of code know playback is happening
   playIndex = 0; // reset play index so playback starts from beginning
   playNext(); // start playback
+
+
 }
 
 function playNext() {
   // end condition - if all lines played
   if (playIndex >= lines.length) {
-    playing = false;
-    return;
-  }
+  playing = false;
+  lines = [];   // safe clear
+  showtimer=true; // all lines played, can show timer again 
+  mintime=millis();
+  return;
+}
+  
 
   let line = lines[playIndex++]; // get next line and increment index
   let waveform = waveMap[line.color] || 'sine'; // get waveform type from color or default to sine
   osc = new p5.Oscillator(waveform); // create oscillator
   osc.start(); // start oscillator
-  let amp = map(line.thickness, 1, 20, 0.1, 1); // map thickness to amplitude
+
+  reverb.process(osc, 3, 2);  
+
+  let amp = map(line.thickness, 1, 20, 0.1, 0.1); // map thickness to amplitude
   osc.amp(amp, 0.05); // ramp up amplitude to prevent clicks or pops by fading to the new amplitude over 0.05s(50ms)
 
   // compute duration from line length
@@ -176,7 +248,8 @@ function playNext() {
     lengthPx += dist(line.points[i-1].x, line.points[i-1].y,  // calculate distance between two x and y pairs that are sequential points in the line
                      line.points[i].x, line.points[i].y);
   }
-  playDuration = lengthPx * baseMsPerPixel / speedSlider.value(); // duration adjusted by speed slider. The pixel length is multiplied by the base ms per pixel (2ms) and divided by the speed slider value.
+  playDuration = lengthPx * baseMsPerPixel ; // duration adjusted by speed slider. -> removed 
+  // The pixel length is multiplied by the base ms per pixel (2ms) and divided by the speed slider value.
   playPoints = line.points; // store points for playhead drawing
   playStartTime = millis(); // store start time for playhead drawing
 
@@ -184,8 +257,8 @@ function playNext() {
   let segMs = playDuration / (playPoints.length - 1); // time per segment. The play duration is divided by the number of segments (points - 1). If playDuration = 2000 ms and playPoints.length = 11, then segMs = 2000 / 10 = 200 ms per segment.
   for (let i = 0; i < playPoints.length - 1; i++) { // iterate through points
     let p1 = playPoints[i], p2 = playPoints[i+1]; // get current and next point. Each is an object with x and y properties.
-    let f1 = map(p1.y, height, 0, 40, 2000); // converts the y-value of each point into a frequnecy (inverted so top is high freq)
-    let f2 = map(p2.y, height, 0, 40, 2000); // converts the y-value of each point into a frequency (inverted so top is high freq)
+    let f1 = map(p1.y, height, 0, 10, 600); // converts the y-value of each point into a frequnecy (inverted so top is high freq)
+    let f2 = map(p2.y, height, 0, 10, 600); // converts the y-value of each point into a frequency (inverted so top is high freq)
     setTimeout(() => osc.freq(f2, segMs/1000), i * segMs); // change the oscillator's pitch to f2, gradually over the course of segMs milliseconds, starting at i * segMs milliseconds after the line starts playing.
   }
 
@@ -248,4 +321,3 @@ function keyPressed() {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
-
