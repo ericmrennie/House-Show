@@ -12,7 +12,13 @@ let palette = ['#ff0000', '#ff9300', '#fffb00', '#0433ff']; // drawing color pal
 let colorIndex = 0; // index for cycling through colors
 let thicknessPalette = [1, 7, 13, 20]; // thickness options
 let thicknessIndex = 0; // index for cycling through thicknesses
-let currentmin; // overall timer to keep track of intervals, periodically save/playback/clear
+//let currentmin; // overall timer to keep track of intervals, periodically save/playback/clear
+
+// min time is set to millis (built in), showtimer toggle
+let mintime; //start time in millis
+let length = 60000; // 1 min cycle length in ms
+let showtimer=false;
+
 
 
 // using this as ref for per minute update: https://editor.p5js.org/brain/sketches/BIzrc_ZDV
@@ -51,7 +57,10 @@ function setup() {
 
   poseNet.on("pose", gotPoses); // pose callback
 
-  currentmin = minute(); // using built in minute() call
+  //currentmin = minute(); // using built in minute() call
+  mintime = millis(); 
+  showtimer = true; 
+
   // UI
   // speed slider
 
@@ -68,30 +77,31 @@ function setup() {
 
 // DRAW ----------------------------------------------------------------------------------
 
-function draw() {
-  let m = minute();
+function draw() { 
 
+  let elapsedSec=millis()-mintime;
 
-  if (m !=currentmin && !playing){
+  if (elapsedSec>=length && !playing){
     // 1. save image
     saveCanvas('myScreenshot'+minute(), 'png')
 
     // 2. play back sound! 
+    showtimer = false;
     playAll();
-    currentmin = m
+    mintime=millis(); // reset timer
   }
 
 
   // draw stored lines
   background(255); 
   strokeCap(ROUND); // rounded line endings
+
   for (let l of lines) drawLine(l); // draw all stored lines
   if (current) drawLine(current); // draw current line
-
-  // draw playhead
-  if (playing) drawPlayhead();
+  if (playing) drawPlayhead(); // draw playhead if playing 
 
   if (!playing && noseX !== null && noseY !== null) {
+   
     let mirroredX = width - noseX;  // mirror x coordinate in video feed
     let mirroredY = noseY; // y coordinate remains the same
 
@@ -103,16 +113,16 @@ function draw() {
 
       // if the nose 'teleports', start a new line instead of connecting
       if (jumpDist > 50) {
-        if (current && current.points.length > 1) {
-          lines.push(current);
-        }
-        current = null; 
+        if (current && current.points.length > 1) lines.push(current);
+        current = null;  
       }
     }
 
+
+   
+
     // if we are not currently drawing a line, create one
     if (!current) {
-
       // pick next color in palette
       let nextColor = palette[colorIndex];
       colorIndex = (colorIndex + 1) % palette.length;
@@ -127,21 +137,38 @@ function draw() {
       };
     }
 
-    // add mirrored nose position instead of original
+
+       // add mirrored nose position instead of original
     current.points.push({ x: mirroredX, y: mirroredY });
 
     // update prev nose every frame (ALSO mirrored)
     prevNose = { x: mirroredX, y: mirroredY };
 
+   }
 
     // if PoseNet loses the nose, finalize line
     if (poses.length === 0) {
-      if (current.points.length > 1) lines.push(current);
+      if (current && current.points.length > 1) lines.push(current);
       current = null;
       prevNose = null;
     }
+
+
+    // timer 
+if (showtimer && !playing) {
+    let elapsedSec = millis()-mintime;
+    let remaining= ceil((length - elapsedSec)/1000);
+
+    remaining = max(0, remaining); // prevent negative display
+
+    fill(0);
+    noStroke();
+    textSize(40);
+    textAlign(CENTER, TOP);
+    text(remaining, width/2, 10);
   }
-}
+  }
+
 
 // DRAW LINE FUNCTION ----------------------------------------------------------------------------------
 function drawLine(l) {
@@ -191,6 +218,8 @@ function playNext() {
   if (playIndex >= lines.length) {
   playing = false;
   lines = [];   // safe clear
+  showtimer=true; // all lines played, can show timer again 
+  mintime=millis();
   return;
 }
   
